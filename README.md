@@ -19,6 +19,13 @@ Finally, this code also includes a visualisation module that allows to assess vi
 - a Faiss install ([Faiss](https://github.com/facebookresearch/faiss))
 - The ImageNet dataset (which can be automatically downloaded by recent version of [torchvision](https://pytorch.org/docs/stable/torchvision/datasets.html#imagenet))
 
+Here, I installed through conda, i.e. conda activate py3
+- [x] pytorch version 1.4.0
+- [x] Torchvision version 0.5.0
+- [x] Cuda 10.1
+
+
+```
 ## Pre-trained models
 We provide pre-trained models with AlexNet and VGG-16 architectures, available for download.
 * The models in Caffe format expect BGR inputs that range in [0, 255]. You do not need to subtract the per-color-channel mean image since the preprocessing of the data is already included in our released models.

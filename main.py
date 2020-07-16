@@ -24,12 +24,13 @@ import torchvision.datasets as datasets
 import clustering
 import models
 from util import AverageMeter, Logger, UnifLabelSampler
-
+import pdb
 
 def parse_args():
     parser = argparse.ArgumentParser(description='PyTorch Implementation of DeepCluster')
 
     parser.add_argument('data', metavar='DIR', help='path to dataset')
+    parser.add_argument('--img_size', type=int, default=64, help='Input img size (default: 64)')
     parser.add_argument('--arch', '-a', type=str, metavar='ARCH',
                         choices=['alexnet', 'vgg16'], default='alexnet',
                         help='CNN architecture (default: alexnet)')
@@ -120,7 +121,7 @@ def main(args):
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
     tra = [transforms.Resize(256),
-           transforms.CenterCrop(224),
+           transforms.CenterCrop(args.img_size),
            transforms.ToTensor(),
            normalize]
 
@@ -134,20 +135,23 @@ def main(args):
                                              batch_size=args.batch,
                                              num_workers=args.workers,
                                              pin_memory=True)
-
     # clustering algorithm to use
     deepcluster = clustering.__dict__[args.clustering](args.nmb_cluster)
 
+    
     # training convnet with DeepCluster
     for epoch in range(args.start_epoch, args.epochs):
         end = time.time()
 
         # remove head
         model.top_layer = None
+        # Remove the ReLU()
         model.classifier = nn.Sequential(*list(model.classifier.children())[:-1])
 
         # get the features for the whole dataset
         features = compute_features(dataloader, model, len(dataset))
+
+        pdb.set_trace()
 
         # cluster the features
         if args.verbose:
@@ -161,6 +165,7 @@ def main(args):
                                                   dataset.imgs)
 
         # uniformly sample per target
+        # image_lists is a List of K- lists, each of which contains indices of samples that belong to corresponding clusters
         sampler = UnifLabelSampler(int(args.reassign * len(train_dataset)),
                                    deepcluster.images_lists)
 
@@ -169,6 +174,7 @@ def main(args):
             batch_size=args.batch,
             num_workers=args.workers,
             sampler=sampler,
+            shuffle=False,
             pin_memory=True,
         )
 
@@ -258,8 +264,9 @@ def train(loader, model, crit, opt, epoch):
                 'state_dict': model.state_dict(),
                 'optimizer' : opt.state_dict()
             }, path)
+        
+        target = target.cuda(non_blocking=True)
 
-        target = target.cuda(async=True)
         input_var = torch.autograd.Variable(input_tensor.cuda())
         target_var = torch.autograd.Variable(target)
 
@@ -267,7 +274,7 @@ def train(loader, model, crit, opt, epoch):
         loss = crit(output, target_var)
 
         # record loss
-        losses.update(loss.data[0], input_tensor.size(0))
+        losses.update(loss.item(), input_tensor.size(0))
 
         # compute gradient and do SGD step
         opt.zero_grad()
@@ -290,7 +297,7 @@ def train(loader, model, crit, opt, epoch):
 
     return losses.avg
 
-def compute_features(dataloader, model, N):
+def compute_features(dataloader, model, N, max_num_batches=-1):
     if args.verbose:
         print('Compute features')
     batch_time = AverageMeter()
@@ -298,6 +305,8 @@ def compute_features(dataloader, model, N):
     model.eval()
     # discard the label information in the dataloader
     for i, (input_tensor, _) in enumerate(dataloader):
+        if i >= max_num_batches and max_num_batches > 0:
+            break
         input_var = torch.autograd.Variable(input_tensor.cuda(), volatile=True)
         aux = model(input_var).data.cpu().numpy()
 
